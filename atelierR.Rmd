@@ -1,0 +1,717 @@
+---
+title: 'Atelier : R pour les projets d’étude/recherche'
+author: "J. Montornès"
+date: "21 mars 2023"
+output:
+  beamer_presentation: default
+  ioslides_presentation: default
+  slidy_presentation: default
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = FALSE)
+
+
+knitr::opts_chunk$set(echo = FALSE)
+library(tidyverse)
+library(stargazer)
+library(fixest)
+library(rdbnomics)
+library(readxl)
+library(dplyr)
+library(data.table)
+library(lubridate)
+library(packrat)
+library(openxlsx)
+library(deSolve)
+library(disaggR)
+theme_set(theme_gray(base_size = 15))
+options(warn=-1)
+```
+
+# Plan
+
+1. Les premiers pas (interface, aide)
+2. Les packages
+3. La syntaxe
+4. L’acquisition de données (séries temporelles, données individuelles)
+5. Le traitement de données
+6. L’estimation
+7. Les sorties (graphiques, tableaux)
+8. Les dates, les chaînes de caractère
+9. Application 1 : l'étalonnage-calage des anticipations quanti/quali
+10. Application 2 : l'équation d'euler de la consommation
+
+# 1. L'interface
+- Editeur : R script ~ do.file, pas de log.file en R
+(File → New File → R Script)
+- Console : résultats ou erreurs
+- Environement :  objets ou fonctions crées
+- Output : packages utilisés, graphiques crées
+
+
+
+```{r figurename2, echo=FALSE, fig.cap="L'interface R", out.width = '80%'}
+knitr::include_graphics("C:/Users/K825778/Documents/Mes présentations/presR/interface.png")
+```
+
+
+# L'aide
+
+- Fonction help()
+
+- Cheatsheet : accessibles depuis le menu Help 
+
+- Pour aller plus loin : [UtilitR](https://www.utilitr.org/), [Stata2r](https://stata2r.github.io/) et la [Mixtape](https://mixtape.scunning.com/)
+
+
+
+
+# 2. Packages
+- 15 000 packages disponibles aujourd'hui sur le CRAN (r-project.org) 
+
+- Installer la première fois  puis commenter
+```{r, echo = TRUE}
+
+install.packages("tidyverse")
+```
+
+- Relancer la commande `library()` à chaque session
+```{r, echo = TRUE}
+
+library(tidyverse)
+
+```
+- Un package est composé de fonctions complémentaires. Package et fonction peuvent avoir le même nom (stargazer) ou pas (pkg ggplot2 et ggplot())
+
+# 2. Packages
+
+
+- Packages concurents  dans la gestion des données : tidyverse vs. data.table
+
+- Cette présentation privilégie le tidyverse mais le data.table est plus adapté pour les grosses bases (centaine de millions d'observation)
+
+- Dans un data.table, les crochets dt[...] permettent de faire beaucoup plus de choses (quasiment tout, en pratique). En fait, les instructions à l’intérieur des crochets peuvent être envisagées comme des requêtes SQL mises en forme différemment
+
+
+
+# 3. La syntaxe : ce qui diffère de Stata
+
+
+- `<-` l'assignatation est préférée à '=' 
+```{r, echo = TRUE}
+prix_baguette <- 0.95
+print(prix_baguette)
+```
+- l'opérateur '%in%' (identifie si un élement appartient à un vecteur)
+```{r, echo = TRUE}
+3 %in% c(1,2,3)
+```
+- la fonction c() crée des vecteurs
+
+- l'opérateur 'pipe' %>% : on en reparle après
+
+
+# 4. Chargement des données
+
+
+#### Stata
+
+Stata ne peut charger qu'une seule base de données à la fois
+
+```stata
+use example_data.dta
+browse
+```
+
+
+#### R
+
+R peut charger plusieurs bases à la fois, il faut donc assigner une base à un objet. 
+
+```{r, echo = TRUE}
+example_data <- c(2,3,5,7,11,13)
+view(example_data) 
+example_data_2 <- c(0,1,1,2,3,8)
+print(example_data_2)
+```
+
+
+
+
+
+
+
+# Importation et exportation de fichiers 
+
+- La fonction read_xlsx() dans le package readxl
+
+
+```r
+chem<-"Cconsumer_inflation_quantitative_estimates.xlsx"
+q61_dataset<- read_xlsx(chem,  sheet = "EA_Q61")
+```
+
+- Des fonctions de type existent pour tous les formats de données : read_csv(), read_csv2(), read_dta, read_sas dans le package haven
+
+- Exportation : write.xlsx (openxlsx)
+```{r, eval=T, echo = TRUE}
+data(mtcars)
+write.xlsx(mtcars,'//intra/partages/AU_AMIC/PROJET_GGSM/Old')  
+```
+
+# Les objets
+
+
+<!-- q61_dataframe<- read_xlsx(chem,  sheet = "EA_Q61",col_names = c("date", "Mean","1st Quartile","Median","3rd Quartile")) -->
+<!-- q61<-q61_dataframe[-1,4]   -->
+
+- Le data frame
+```{r, eval=T, echo = F}
+chem<-"//intra/partages/AU_AMIC/EXPECTATIONS/Commission_Europeenne/ANTICIP/A-dossier_CMR/data_ini/màj_06012023/consumer_inflation_quantitative_estimates.xlsx"
+q61_dataset<- read_xlsx(chem,  sheet = "EA_Q61")
+
+#selection de la médiane
+q61<-q61_dataset[c('Median')]  
+
+#conversion en serie temporelle
+q61_ts = ts(q61  , start = c(2004, 1), frequency = 4)
+
+```
+- La série temporelle
+```{r, echo = TRUE}
+q61_ts <- ts(q61  , start = c(2004, 1), frequency = 4)
+```
+-  Vecteur
+```{r, echo = TRUE}
+services <- c("samic", "seps", "seec")
+```
+- Matrice
+```{r, echo = TRUE}
+A<-matrix(1:9,nrow=3,ncol=3)
+```
+- Liste, bouleen, etc.
+
+
+# Import d'une série macroéconomique avec rdbnomics
+
+https://db.nomics.world/
+
+Ma méthode : 
+1) mots clés "national accounts  insee" 2) selection de la série avec vos critères 
+3) récupérer le code de la série 
+```r
+
+# Options obligatoires a la BdF
+options(rdbnomics.use_readLines = TRUE)
+
+df_ct <- rdb(ids = c("INSEE/CNT-2014-CSI/T.CNT-OPERATIONS_SECTEURS_INST.S11.E.D11.VALEUR_ABSOLUE.FE.EUROS.CVS"))
+
+```
+
+```{r, echo=FALSE,eval=TRUE}
+##############################################################
+# Options obligatoires a la BdF
+options(rdbnomics.use_readLines = TRUE)
+##############################################################
+df_ct <- rdb(ids = c("INSEE/CNT-2014-CSI/T.CNT-OPERATIONS_SECTEURS_INST.S11.E.D11.VALEUR_ABSOLUE.FE.EUROS.CVS"))
+head(df_ct$value,3)
+```
+
+
+Pour aller plus loin : les posts de blog de Thomas Brand (https://www.r-bloggers.com/2020/10/access-the-free-economic-database-dbnomics-with-r-4/)
+
+
+
+# 5. Le traitement des données avec dplyr
+
+
+- **dplyr** 
+1. mutate() création de variables
+2. select() selection de colones
+3. filter() filtre des lignes
+4. summarise() agrégation 
+5. arrange() tri
+
+
+- Les fonction de **dplyr** ne modifie pas les données. Il faut assigner les données dans un nouveau dataframe
+
+
+
+# 5. Le traitement des données avec dplyr
+
+
+- l'opérateur "pipe" '%>%' permet d'enchaîner les instructions à la suite les unes des autres avec le package dplyr
+
+```{r, echo = TRUE,eval=T}
+data("mtcars")
+mtcars %>% 
+  summarise(mean_mpg = mean(mpg)) 
+
+```
+
+
+# Filtrer des lignes, sélectionner de colonnes
+
+## Stata
+```stata
+keep if mpg>15
+keep mpg cyl gear
+```
+
+## R
+```{r, echo=T,eval=TRUE}
+data("mtcars")
+mtcars %>% 
+   filter(mpg>15) %>%
+   select(mpg,cyl,gear)
+
+```
+
+- Suppresion de variables select(-var1)
+
+# Créer une variable : mutate
+
+
+## Créer une variable 
+
+### Stata
+```stata
+gen kml=mpg*0.4
+```
+### R dplyr
+````{r, echo=T,eval=TRUE}
+mtcars %>% 
+  mutate(kml=mpg*0.4)  %>% 
+  select(kml,mpg) %>%
+  arrange(kml,mpg)
+```
+
+
+
+# Agréger les données  (moyenne par groupe)
+
+### Stata
+```stata
+collapse (mean) mean_mpg = mpg, by(cyl)
+```
+
+### R dplyr
+```{r, echo = TRUE,eval=T}
+data("mtcars")
+mtcars %>% 
+  group_by(cyl) %>% 
+  summarise(mean_mpg = mean(mpg))
+```
+
+
+
+# Fusionner deux tables
+
+
+### Stata
+```stata
+merge 1:1 id name using stat.dta
+```
+### R : Methode 1
+```{r, echo = TRUE,eval=T}
+
+df1 <- data.frame(id=c(1, 2, 3, 4, 5),
+                  revenue=c(34, 36, 40, 49, 43))
+df2 <- data.frame(id=c(1, 2, 5, 6, 7),
+                  expenses=c(22, 26, 31, 40, 20))     
+df <- merge( df1,  df2, by="id")
+print(df)
+
+```
+### Methode 2 : inner_join(),left_join(), right_join(), full_join()
+
+
+
+# 6. L'estimation
+
+
+## Stata
+
+```stata
+reg y x1 x2
+```
+
+## R base
+
+```{r, echo = TRUE,eval=F}
+eps <- rnorm(100)
+x1 <- rnorm(100)
+x2 <- rnorm(100)
+y <-  2*x1 + x2 + eps
+secteur<-round(runif(100, min=1, max=6))
+df<-data.frame(y,x1,x2,secteur)
+lm(y ~ x1 + x2, df)
+```
+
+
+
+#  Fixest
+##  Estimation très rapide et conviviale de modèles à effets fixes pour un vaste ensemble de modèles linéaire ou non-linéaire : feglm, femlm, fenegbin, fepois
+
+## fixest > reghdfe (Stata) ; fixest > FixedEffestModels (Julia)
+
+```r
+feols(y ~ x1 + x2, data=df)
+```
+```{r, echo = F,eval=F}
+eps <- rnorm(100)
+x1 <- rnorm(100)
+x2 <- rnorm(100)
+y <-  2*x1 + x2 + eps
+secteur<-round(runif(100, min=1, max=6))
+df<-data.frame(y,x1,x2,secteur)
+feols(y ~ x1 + x2, data=df)
+```
+# R fixest
+```{r, echo = TRUE,eval=T}
+library(fixest)
+data(trade)
+# OLS estimation
+gravity = feols (log(Euros) ~ log(dist_km) | 
+  Destination + Origin + Product + Year, trade)
+summary(gravity)
+```
+
+# Dummies dans un modèle
+
+## Stata
+
+
+Dans Stata, on ajoute `i.` :
+
+```stata
+reg y i.secteur 
+```
+
+## R
+
+Dans R, on tranforme la variable en factor()
+
+```r
+feols(y ~ x1 + x2 + factor(secteur), data=df)
+```
+
+Si la variable est assignée dans le dataframe comme facteur il n'est pas besoin de la transformer
+
+
+
+
+# Ecart-types robustes
+
+## Stata
+
+```stata
+* ", robust" utilise hc1 par defaut
+regress y x1 x2, robust
+regress y x1 x2, vce(hc3)
+```
+
+## R
+```r
+# sandwich's vcovHC utilise HC3 par defaut
+feols(y ~ x1 + x2, df, vcov = sandwich::vcovHC) 
+
+
+```
+
+
+
+
+
+
+# 7. Les sorties : Tableau de regression
+
+## Stata
+```stata
+reg y x1 x2 
+eststo est1 
+esttab est1b
+
+esttab est1 est1b
+```
+## R
+
+
+```r
+mod1<-lm(y ~ x1 + x2, df)
+mod2<-lm(y ~ x1 + x2 + factor(secteur), df)
+stargazer(mod1, mod2,type="text")
+```
+# 7. Les sorties : Tableau de regression
+
+```{r figurename3, echo=FALSE, fig.cap="Modèle (1) vs (2)", out.width = '60%'}
+knitr::include_graphics("C:/Users/K825778/Documents/Mes présentations/presR/stargazer.png")
+```
+
+
+# Histograme simple
+
+## Stata
+```stata
+set obs 100
+gen x = rnormal()
+histogram x
+```
+## R
+```r
+x <- rnorm(100)
+hist(x)
+```
+
+# Histograme simple
+
+## R
+```{r, echo = F,eval=TRUE}
+x <- rnorm(100)
+hist(x)
+```
+
+# Nuage de points
+## Stata
+```stata
+twoway scatter x y
+
+```
+
+## R 
+
+```r
+
+plot(x, y)
+
+```
+# Nuage de points : Méthode 1
+
+
+```{r, echo = F,eval=TRUE}
+x <- rnorm(100)
+y <- runif(100)
+
+plot(x, y)
+
+```
+
+
+# Nuage de points : Méthode ggplot2
+
+
+```{r,echo = T,eval=F}
+x <- rnorm(100)
+y <- runif(100)
+df<-data.frame(x,y)
+
+ggplot(df) + geom_point(aes(x, y))
+```
+
+# Nuage de points : Méthode ggplot2
+
+
+```{r, echo = F,eval=TRUE}
+x <- rnorm(100)
+y <- runif(100)
+df<-data.frame(x,y)
+
+ggplot(df) + geom_point(aes(x, y))
+
+```
+
+
+
+# Les graphiques avancés avec ggplot2
+- On dispose d'un data frame de 3 variables (**df1**) : period, value, var 
+- Choix d'un type de graphique : ici c'est **geom_line**
+- **aes** : Lier les données aux élements visuels "period" → x, "value" → y, "var" → shape, color, etc.
+- Ensuite, les options du graphiques ("theme", "scale", etc.) s'ajoutent les unes aux autres avec "+"
+
+
+```r
+ggplot(df1) +
+  geom_line(size = 1.2, aes(x = period, y = value, color = var)) +
+  theme_minimal()+ xlab("") + ylab("") +
+  scale_x_date(breaks='2 year',expand=c(0.01,0.01),date_labels = "%Y") +
+  scale_y_continuous(breaks=seq(-6, 8, by = 2)) +
+  theme(legend.position ="bottom") +
+  theme(legend.title = element_blank())
+
+```
+
+# R ggplot 
+```{r figurename4, echo=FALSE, fig.cap="Commandes des principaux types de graphique ggplot", out.width = '80%'}
+knitr::include_graphics("C:/Users/K825778/Documents/Mes présentations/presR/geom_demo.png")
+```
+
+
+# R ggplot 
+```{r figurename, echo=FALSE, fig.cap="Evolution des salaires en France, moyenne annuelle", out.width = '70%'}
+knitr::include_graphics("//intra/partages/AU_AMIC/SALAIRES/Sorties/smbsmpt2.png")
+```
+
+
+
+# 8. Manipuler les dates avec Lubridate
+
+## Stata
+- J'ai beaucoup de problèmes avec les dates Stata
+
+
+## R
+- En R, il existe un vaste ensemble de fonctions qui rendent la vie plus simple
+
+- Un exemple avec une fonction qui convertit une "chaîne de caractères" FR en date 
+
+
+```{r, echo=T,eval=TRUE}
+jourJ <- dmy("11 février 2023")
+class(jourJ)
+print(jourJ)
+```
+
+# 8. Manipuler les dates avec Lubridate
+
+## Conversion (suite) : ymd(), ymd_hms, dmy_hms, mdy(), …
+
+```{r, echo=T,eval=TRUE}
+jourJ <-ymd(20230211)
+print(jourJ)
+```
+
+## Extraire un composant d'une date : year(), month(), mday(), hour(), minute() and second()
+
+```{r, echo=T,eval=TRUE}
+annee <-year(jourJ)
+print(annee)
+```
+
+
+# 8. Les chaînes de caractères avec Stringr 
+
+
+## Stata
+```stata
+subinstr("Hello world", "world", "universe", .)
+substr("Hello world", 1, 4)
+regexm("Hello world", "Hello")
+
+```
+
+## R 
+
+
+```{r, echo=T,eval=TRUE}
+str_replace_all("Hello world", "world", "universe")
+str_sub("Hello world", 1, 4)
+str_detect("Hello world", "Hello")
+```
+
+# 8. Les chaînes de caractères : conversion
+## Stata
+```stata 
+detring id, replace  
+```
+  
+## R 
+```{r, echo=T,eval=TRUE}
+id <- c("0999")
+id_num <-as.numeric(id)
+print(id_num)
+
+```
+
+# Application 1 : Etallonage-calage
+
+
+```{r, echo=F,eval=T}
+# q6 : anticipations quali
+chem2<-"//intra/partages/AU_AMIC/EXPECTATIONS/Commission_Europeenne/ANTICIP/A-dossier_CMR/data_ini/màj_06012023/consumer_subsectors_nsa_q6_nace2.xlsx"
+q6_dataset<- read_xlsx(chem2,  sheet = "TOT")
+
+#selection du solde d'opinion 
+q6<-subset(q6_dataset,TOT>"2004-01-3")
+q6_ze<- q6[c('CONS.EA.TOT.6.B.M')] 
+
+#conversion en serie temporelle
+q6_ts <- ts(q6_ze  , start = c(2004, 1), frequency = 12)
+benchmark <- twoStepsBenchmark(hfserie = q6_ts,
+                               lfserie = q61_ts,
+                               include.differenciation = FALSE)
+q61_ts_mens<-as.ts(benchmark)
+q61_ts_mens
+
+```
+
+
+
+# Application 1 : Etallonage-calage
+
+
+```{r, echo=F,eval=TRUE}  
+#la série  quanti mensualisée
+
+
+
+#graphique de contrôle série trimestrielle et mensualisée
+plot(q61_ts,ylim=c(0,15),xlab="",ylab="")
+lines(q61_ts_mens*3, col = 2)
+legend("bottomleft", legend = c("Observé", "Simulé"),text.col = c("black","red")) 
+```
+
+# Application 2 : l'équation d'euler
+
+
+```{r, echo=T,eval=TRUE} 
+
+# paramètres
+r<-1
+rho<-0.9
+theta<-0.5
+g<-0.9
+coninital <- c(con = 1)
+times <- seq(from = 0, to = 100, by = 0.2)
+ 
+# définition d'une fonction
+cdot <- function(t, con, parms){
+  list((((r-rho)/theta))*con)}
+
+# résoltion numérique de l'équation différentielle
+out <- ode(y = coninital, times = times, func = cdot,
+           parms = NULL)
+
+
+```
+  
+  
+# Application : l'équation d'euler
+
+
+ 
+ 
+```{r, echo=F,eval=TRUE} 
+
+#paramètres
+r<-1
+rho<-0.9
+theta<-0.5
+g<-1
+coninital <- c(con = 1)
+times <- seq(from = 0, to = 100, by = 0.2)
+ 
+# euler equation
+cdot <- function(t, con, parms){
+  list((((r-rho)/theta)-g)*con)}
+
+#ode
+out <- ode(y = coninital, times = times, func = cdot,
+           parms = NULL)
+
+plot(out, main = "Consumption based on Euler Equation")
+```
+
+
+
+

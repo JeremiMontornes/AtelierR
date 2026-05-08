@@ -2,22 +2,12 @@
 
 Formation d'introduction a R pour des utilisateurs de Stata, orientee vers les projets d'etude et de recherche economique.
 
-## Objectifs pedagogiques
-
-A la fin de l'atelier, les participants doivent savoir :
-
-- se reperer dans RStudio et comprendre le cycle script -> console -> objets -> sorties ;
-- installer et charger des packages ;
-- importer, transformer, agreger et fusionner des donnees ;
-- traduire les reflexes Stata usuels en idiomes R ;
-- produire un graphique et une table de regression reproductibles ;
-- manipuler des dates et des chaines de caracteres ;
-- organiser un petit projet d'analyse.
-
 ## Contenu du depot
 
 - `atelierR.Rmd` : slides en francais.
+- `atelierR.pdf` : version PDF des slides en francais.
 - `atelierR_en.Rmd` : slides en anglais.
+- `atelierR_en.pdf` : version PDF des slides en anglais.
 - `data/sample_economy.csv` : jeu de donnees autonome utilise pendant l'atelier.
 - `exercises/` : exercices a faire pendant la formation.
 - `solutions/` : corriges executables.
@@ -48,16 +38,3 @@ Pour verifier les exercices :
 source("solutions/01_basics_solution.R")
 source("solutions/02_data_workflow_solution.R")
 ```
-
-## Deroule conseille
-
-1. 15 min : installation, interface, aide.
-2. 30 min : syntaxe, objets, packages.
-3. 45 min : importer, filtrer, selectionner, creer des variables.
-4. 30 min : agregation, jointures, graphiques.
-5. 30 min : regressions et sorties.
-6. 30 min : exercice recapitulatif.
-
-## Notes de maintenance
-
-Le support est volontairement autonome : aucun chemin absolu, aucun fichier reseau, aucun appel web obligatoire. Les appels a des bases externes comme DB.NOMICS sont presentes comme exemples non executes afin que le rendu reste reproductible.

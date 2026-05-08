@@ -1,0 +1,325 @@
+---
+title: "R Workshop for Applied Research Projects"
+subtitle: "A practical bridge for Stata users"
+author: "J. Montornes"
+date: "`r format(Sys.Date(), '%Y-%m-%d')`"
+output:
+  ioslides_presentation:
+    widescreen: true
+    smaller: true
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(
+  echo = TRUE,
+  message = FALSE,
+  warning = FALSE,
+  fig.width = 7,
+  fig.height = 4
+)
+library(dplyr)
+library(ggplot2)
+library(fixest)
+library(lubridate)
+library(stringr)
+theme_set(theme_minimal(base_size = 14))
+sample_data <- read.csv("data/sample_economy.csv")
+```
+
+## Workshop goals
+
+- Understand the key differences between R and Stata.
+- Write reproducible scripts instead of isolated console commands.
+- Manipulate data with `dplyr`.
+- Produce charts, regressions and simple output tables.
+- Know where to find help and how to structure a small project.
+
+## Agenda
+
+1. Interface, help and project structure.
+2. Packages, objects and syntax.
+3. Data import and data manipulation.
+4. Charts and tables.
+5. Econometric estimation.
+6. Dates, strings and wrap-up exercise.
+
+## RStudio interface
+
+- **Script**: saved, versionable and rerunnable source code.
+- **Console**: interactive execution and error messages.
+- **Environment**: objects currently stored in memory.
+- **Files / Plots / Packages / Help**: outputs, files and documentation.
+
+Useful habit: anything you want to keep should be written in a script, not only typed in the console.
+
+## Help and documentation
+
+```{r eval=FALSE}
+?lm
+help("merge")
+example(mean)
+```
+
+Useful resources:
+
+- [R for Data Science](https://r4ds.hadley.nz/)
+- [Stata2R](https://stata2r.github.io/)
+- [UtilitR](https://www.utilitr.org/)
+
+## Packages
+
+A package adds functions, datasets or methods.
+
+```{r eval=FALSE}
+install.packages("dplyr")  # once per machine
+library(dplyr)             # in each new session
+```
+
+For training, listing required packages in the README or an install script prevents many last-minute issues.
+
+## Objects and assignment
+
+```{r}
+baguette_price <- 0.95
+quantities <- c(1, 2, 3)
+spending <- baguette_price * quantities
+spending
+```
+
+In R, results are usually assigned to objects with `<-`. The `=` sign often works, but `<-` remains the clearest convention.
+
+## Useful differences with Stata
+
+| Stata | R |
+|---|---|
+| One active dataset in memory | Several objects at the same time |
+| `use`, `save` | `read.csv()`, `write.csv()`, `readxl::read_xlsx()` |
+| `gen`, `replace` | `mutate()` |
+| `keep if` | `filter()` |
+| `collapse` | `group_by()` then `summarise()` |
+| `merge` | `left_join()`, `inner_join()`, `full_join()` |
+
+## Importing a file
+
+```{r}
+economy <- read.csv("data/sample_economy.csv")
+head(economy)
+```
+
+For Excel files:
+
+```{r eval=FALSE}
+readxl::read_xlsx("data/my_file.xlsx", sheet = "Sheet1")
+```
+
+## Selecting and filtering
+
+### Stata
+
+```stata
+keep if country == "France" & year >= 2021
+keep country year sector wage
+```
+
+### R
+
+```{r}
+economy |>
+  filter(country == "France", year >= 2021) |>
+  select(country, year, sector, wage)
+```
+
+## Creating a variable
+
+### Stata
+
+```stata
+gen real_wage = wage / price_index * 100
+```
+
+### R
+
+```{r}
+economy <- economy |>
+  mutate(real_wage = wage / price_index * 100)
+
+economy |>
+  select(country, year, sector, real_wage) |>
+  head()
+```
+
+## Aggregating
+
+### Stata
+
+```stata
+collapse (mean) mean_wage = wage, by(country year)
+```
+
+### R
+
+```{r}
+country_year <- economy |>
+  group_by(country, year) |>
+  summarise(mean_wage = mean(wage), .groups = "drop")
+
+country_year
+```
+
+## Joining two tables
+
+```{r}
+population <- data.frame(
+  country = c("France", "Germany", "Italy"),
+  population_m = c(67.8, 83.2, 59.0)
+)
+
+country_year |>
+  left_join(population, by = "country") |>
+  head()
+```
+
+Remember the direction of the join: `left_join(x, y)` keeps all rows from `x`.
+
+## data.table in one sentence
+
+`data.table` is very efficient on large datasets. Its syntax is compact:
+
+```{r}
+library(data.table)
+dt <- as.data.table(economy)
+dt[country == "France", .(mean_wage = mean(wage)), by = year]
+```
+
+For beginners, `dplyr` is often easier to read; for massive datasets, `data.table` may become preferable.
+
+## Simple chart
+
+```{r}
+ggplot(country_year, aes(x = year, y = mean_wage, color = country)) +
+  geom_line(linewidth = 1) +
+  geom_point(size = 2) +
+  labs(x = NULL, y = "Average wage", color = NULL)
+```
+
+## ggplot2 principles
+
+- `ggplot(data, aes(...))` declares the data and mapped variables.
+- `geom_*()` chooses the visual representation: points, lines, bars.
+- `labs()`, `scale_*()` and `theme_*()` adjust presentation.
+- Each layer is added with `+`.
+
+```{r eval=FALSE}
+ggplot(data, aes(x = x, y = y)) +
+  geom_point() +
+  labs(x = "X", y = "Y")
+```
+
+## Linear regression
+
+### Stata
+
+```stata
+reg real_wage employment i.sector
+```
+
+### Base R
+
+```{r}
+model_lm <- lm(real_wage ~ employment + factor(sector), data = economy)
+summary(model_lm)
+```
+
+## Fixed effects with fixest
+
+`fixest` is close in spirit to `reghdfe`: fast, concise and convenient for fixed effects and clustered standard errors.
+
+```{r}
+model_fe <- feols(
+  real_wage ~ employment | country + year,
+  data = economy,
+  vcov = ~ country
+)
+etable(model_fe)
+```
+
+## Clean output
+
+```{r}
+broom::tidy(model_lm)
+```
+
+For a report:
+
+- keep model objects (`model_lm`, `model_fe`);
+- generate tables in the script;
+- avoid manual copy-paste from the console.
+
+## Dates with lubridate
+
+```{r}
+day <- ymd("2023-02-11")
+day
+year(day)
+month(day)
+```
+
+`ymd()`, `dmy()` and `mdy()` make the day/month/year order explicit.
+
+## Strings with stringr
+
+```{r}
+text <- "Hello world"
+str_replace(text, "world", "universe")
+str_sub(text, 1, 5)
+str_detect(text, "Hello")
+```
+
+Mental translation:
+
+- Stata `subinstr()` -> R `str_replace()` or `str_replace_all()`.
+- Stata `substr()` -> R `str_sub()`.
+- Stata `regexm()` -> R `str_detect()`.
+
+## Web calls and external databases
+
+For DB.NOMICS or other APIs, showing non-executed code keeps slides robust.
+
+```{r eval=FALSE}
+library(rdbnomics)
+df <- rdbnomics::rdb(ids = "INSEE/CNT-2014-CSI/...")
+```
+
+In training, always provide a local fallback file in case the network, proxy or API is unavailable.
+
+## Recommended mini-project
+
+1. Import `data/sample_economy.csv`.
+2. Create a real wage variable.
+3. Compute average wages by country and year.
+4. Plot the time series.
+5. Estimate a simple model with fixed effects.
+6. Save the chart and the result table.
+
+## Project good practices
+
+```text
+AtelierR/
+  data/
+  exercises/
+  solutions/
+  atelierR.Rmd
+  atelierR_en.Rmd
+  README.md
+```
+
+- Use relative paths from the project root.
+- Store lightweight example data in `data/`.
+- Keep executable solutions in `solutions/`.
+- Document goals, prerequisites and rendering commands in the README.
+
+## Conclusion
+
+R is not only a statistical calculator: it is a project environment.
+
+The main gain over purely interactive work is reproducibility: tomorrow, someone should be able to rerun the script and obtain the same outputs.

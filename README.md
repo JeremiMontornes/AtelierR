@@ -1,6 +1,6 @@
 # AtelierR
 
-Formation d'introduction a R pour des utilisateurs de Stata, orientee vers les projets d'etude et de recherche economique.
+Formation d'introduction à R pour des utilisateurs de Stata
 
 ## Contenu du depot
 
